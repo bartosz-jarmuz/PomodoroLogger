@@ -9,7 +9,7 @@ import { debounce } from 'lodash';
 import { FocusSelector } from './FocusSelector';
 import { Monitor } from '../../monitor';
 import styled from 'styled-components';
-import { BrowserWindow, ipcRenderer, nativeImage, remote } from 'electron';
+import { BrowserWindow, nativeImage, remote } from 'electron';
 import AppIcon from '../../../res/icon.png';
 import { setTrayImageWithMadeIcon } from './iconMaker';
 import { getTodaySessions } from '../../monitor/sessionManager';
@@ -501,9 +501,6 @@ class Timer extends Component<Props, State> {
 
         this.calculateSessionEfficiency();
         this.monitor.stop();
-        if (this.props.timer.boardId === undefined) {
-            this.props.inferProject(thisSession);
-        }
     };
 
     private calculateSessionEfficiency() {
@@ -527,41 +524,53 @@ class Timer extends Component<Props, State> {
         return duration - leftTimeInSec;
     }
 
+    private isConfirming = false;
     private onSessionConfirmed = debounce(async () => {
-        if (this.monitor) {
-            this.monitor.clear();
-            this.monitor = undefined;
+        if (this.isConfirming) {
+            return;
         }
 
-        this.setState({ pomodoroNum: this.state.pomodoroNum + 1 });
-        if (this.stagedSession === undefined) {
-            // Resting session
-            await this.props.timerFinished();
-        } else {
-            restartDBWorkers();
-            this.stagedSession.spentTimeInHour += this.extendedTimeInMinute / 60;
-            this.extendedTimeInMinute = 0;
-            if (this.props.timer.boardId !== undefined) {
-                this.stagedSession.boardId = this.props.timer.boardId;
-                const kanban = this.props.kanban;
-                const cards: string[] =
-                    kanban.lists[kanban.boards[this.props.timer.boardId].focusedList].cards;
-                await this.props.timerFinished(this.stagedSession, cards, this.props.timer.boardId);
-            } else {
-                await this.props.timerFinished(this.stagedSession);
+        this.isConfirming = true;
+        try {
+            if (this.monitor) {
+                this.monitor.clear();
+                this.monitor = undefined;
             }
 
-            const finishedSessions = this.state.pomodorosToday.concat([this.stagedSession]);
-            this.setState({ pomodorosToday: finishedSessions, leftTime: '' });
-            this.stagedSession = undefined;
-        }
+            await new Promise((r) => this.setState({ pomodoroNum: this.state.pomodoroNum + 1 }, r));
+            const stagedSession = this.stagedSession;
+            if (stagedSession == null) {
+                // Resting session
+                await this.props.timerFinished();
+            } else {
+                restartDBWorkers();
+                stagedSession.spentTimeInHour += this.extendedTimeInMinute / 60;
+                this.extendedTimeInMinute = 0;
+                if (this.props.timer.boardId !== undefined) {
+                    stagedSession.boardId = this.props.timer.boardId;
+                    const kanban = this.props.kanban;
+                    const cards: string[] =
+                        kanban.lists[kanban.boards[this.props.timer.boardId].focusedList].cards;
+                    await this.props.timerFinished(stagedSession, cards, this.props.timer.boardId);
+                } else {
+                    await this.props.timerFinished(stagedSession);
+                }
 
-        if (this.willStartNextSessionImmediately) {
-            this.willStartNextSessionImmediately = false;
-            await new Promise((r) => setTimeout(r, 30));
-            this.onStart();
+                const finishedSessions = this.state.pomodorosToday.concat([stagedSession]);
+                await new Promise((r) =>
+                    this.setState({ pomodorosToday: finishedSessions, leftTime: '' }, r)
+                );
+                this.stagedSession = undefined;
+            }
+
+            if (this.willStartNextSessionImmediately) {
+                this.willStartNextSessionImmediately = false;
+                this.onStart();
+            }
+        } finally {
+            this.isConfirming = false;
         }
-    }, 50);
+    }, 20);
 
     private focusOnCurrentWindow() {
         if (this.win) {
@@ -631,8 +640,13 @@ class Timer extends Component<Props, State> {
         } else if (__DEV__) {
             throw new Error();
         } else {
+            console.error('Monitor is null when extending');
             this.monitor = new Monitor(() => {}, 1000, this.props.timer.screenShotInterval);
             this.monitor.start();
+        }
+
+        if (__DEV__) {
+            timeInMinutes /= 60;
         }
 
         this.extendedTimeInMinute += timeInMinutes;
@@ -682,26 +696,14 @@ class Timer extends Component<Props, State> {
     };
 
     componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+        console.error(error);
+        console.error(errorInfo);
         message.error(error.toString());
     }
 
     render() {
-        const { leftTime, percent, more, pomodorosToday, showMask } = this.state;
+        const { leftTime, percent, more, showMask } = this.state;
         const { isRunning, targetTime } = this.props.timer;
-        const apps: { [appName: string]: { appName: string; spentHours: number } } = {};
-        for (const pomodoro of pomodorosToday) {
-            for (const appName in pomodoro.apps) {
-                if (!(appName in apps)) {
-                    apps[appName] = {
-                        appName,
-                        spentHours: 0,
-                    };
-                }
-
-                apps[appName].spentHours += pomodoro.apps[appName].spentTimeInHour;
-            }
-        }
-
         const shownLeftTime =
             (isRunning || targetTime) && leftTime.length ? leftTime : this.defaultLeftTime();
         const boardId = this.props.timer.boardId;

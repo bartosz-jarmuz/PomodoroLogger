@@ -1,5 +1,5 @@
 import { hot } from 'react-hot-loader/root';
-import { Icon, Tabs } from 'antd';
+import { Icon, Tabs, message } from 'antd';
 import * as React from 'react';
 import 'antd/dist/antd.css';
 import Setting from './Setting';
@@ -68,9 +68,9 @@ class Application extends React.Component<Props> {
 
     onError = (event: ErrorEvent) => this.handleError(event.error);
     handleError = (err: Error) => {
-        if (process.env.NODE_ENV === 'production') {
-            ipcRenderer.send('restart-app', 'error');
-        }
+        console.error(err);
+        // TODO: get derived state!
+        message.error('Encounter some error: ' + err);
     };
 
     componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
