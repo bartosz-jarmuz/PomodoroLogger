@@ -61,22 +61,6 @@ if (process.platform === 'win32') {
     app.setAppUserModelId('com.electron.time-logger');
 }
 
-const installExtensions = async () => {
-    return new Promise((res, rej) => {
-        const rejectTimer = setTimeout(() => {
-            rej();
-        }, 15000);
-        const installer = require('electron-devtools-installer');
-        const forceDownload = false;
-        const extensions = ['REACT_DEVELOPER_TOOLS', 'REDUX_DEVTOOLS'];
-        return Promise.all(
-            extensions.map((name) => installer.default(installer[name], forceDownload))
-        ).catch(rej);
-        clearTimeout(rejectTimer);
-        res();
-    });
-};
-
 const createWindow = async () => {
     win = new BrowserWindow({
         width: 1080,
@@ -91,10 +75,6 @@ const createWindow = async () => {
             nodeIntegration: true,
         },
     });
-
-    if (process.env.NODE_ENV !== 'production') {
-        await installExtensions().catch(console.error);
-    }
 
     if (process.env.NODE_ENV === 'production') {
         win.removeMenu();
