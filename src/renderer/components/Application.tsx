@@ -24,9 +24,18 @@ import { UpdateController } from './UpdateController';
 import { UserGuide } from './UserGuide/UserGuide';
 import { ConnectedPomodoroSankey } from './Visualization/PomodoroSankey';
 
-const Main = styled.div`
+interface StyledProps {
+    minimize: boolean;
+}
+
+const Main = styled.div<StyledProps>`
     .ant-tabs-bar {
         margin: 0;
+    }
+
+    ${({ minimize }) => (minimize ? 'overflow: hidden; height: 100vh;' : '')}
+    .ant-tabs-nav-container,.ant-modal-content {
+        ${({ minimize }) => (minimize ? 'display: none;' : '')}
     }
 
     .ant-btn-icon-only > i {
@@ -42,11 +51,13 @@ const { TabPane } = Tabs;
 
 interface Props extends TimerActionTypes, HistoryActionCreatorTypes {
     currentTab: string;
+    minimize: boolean;
 
     fetchKanban: () => void;
 }
 
 class Application extends React.Component<Props> {
+    private timer = (<Timer />);
     componentDidMount(): void {
         loadDBs().then(() => {
             this.props.fetchSettings();
@@ -71,6 +82,10 @@ class Application extends React.Component<Props> {
             case 'ctrl+q':
                 ipcRenderer.send(IpcEventName.Quit, 'quit');
                 break;
+            case 'f11':
+            case 'f12':
+                this.props.setMinimize(!this.props.minimize);
+                break;
         }
     };
 
@@ -92,10 +107,10 @@ class Application extends React.Component<Props> {
     }
 
     render() {
-        const { currentTab, changeAppTab } = this.props;
+        const { currentTab, changeAppTab, minimize } = this.props;
         return (
-            <Main>
-                <Tabs activeKey={currentTab} onChange={changeAppTab as any}>
+            <Main minimize={minimize}>
+                <Tabs activeKey={minimize ? 'timer' : currentTab} onChange={changeAppTab as any}>
                     <TabPane
                         tab={
                             <span>
@@ -106,7 +121,7 @@ class Application extends React.Component<Props> {
                         forceRender={true}
                         key="timer"
                     >
-                        <Timer />
+                        {this.timer}
                     </TabPane>
 
                     <TabPane
@@ -157,12 +172,16 @@ class Application extends React.Component<Props> {
                         <Setting />
                     </TabPane>
                 </Tabs>
-                <UserGuide />
-                <UpdateController />
-                <CardInDetail />
-                <ConnectedPomodoroSankey />
+                {!minimize && (
+                    <>
+                        <UserGuide />
+                        <UpdateController />
+                        <CardInDetail />
+                        <ConnectedPomodoroSankey />
+                    </>
+                )}
                 <ReactHotkeys
-                    keyName={'ctrl+tab,ctrl+shift+tab,ctrl+f12,ctrl+q'}
+                    keyName={'ctrl+tab,ctrl+shift+tab,ctrl+f12,ctrl+q,f11,f12'}
                     onKeyDown={this.onKeyDown}
                 />
             </Main>
@@ -171,7 +190,7 @@ class Application extends React.Component<Props> {
 }
 
 const ApplicationContainer = connect(
-    (state: RootState) => ({ currentTab: state.timer.currentTab }),
+    (state: RootState) => ({ currentTab: state.timer.currentTab, minimize: state.timer.minimize }),
     genMapDispatchToProp<TimerActionTypes & HistoryActionCreatorTypes>({
         ...timerActions,
         ...historyActions,
