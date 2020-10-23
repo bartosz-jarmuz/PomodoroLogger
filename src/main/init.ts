@@ -10,7 +10,7 @@ import { AutoUpdater } from './AutoUpdater';
 import { initialize } from './ipc/ipc';
 import { IpcEventName } from './ipc/type';
 
-const { compact, refreshDbs, loadDBs } = db;
+const { refreshDbs, loadDBs } = db;
 export let win: BrowserWindow | undefined;
 
 export const gotTheLock = process.env.NODE_ENV !== 'production' || app.requestSingleInstanceLock();
@@ -30,7 +30,6 @@ if (!gotTheLock) {
 const mGlobal: typeof global & {
     sharedDB?: typeof db.DBs;
     utils?: {
-        compact: typeof compact;
         refreshDbs: typeof refreshDbs;
         loadDBs: typeof loadDBs;
     };
@@ -40,34 +39,18 @@ const mGlobal: typeof global & {
 } = global;
 mGlobal.sharedDB = db.DBs;
 mGlobal.utils = {
-    compact,
     refreshDbs,
     loadDBs,
 };
 if (process.platform === 'win32') {
     app.setAppUserModelId('com.electron.time-logger');
 }
-const installExtensions = async () => {
-    return new Promise((res, rej) => {
-        const rejectTimer = setTimeout(() => {
-            rej();
-        }, 15000);
-        const installer = require('electron-devtools-installer');
-        const forceDownload = false;
-        const extensions = ['REACT_DEVELOPER_TOOLS', 'REDUX_DEVTOOLS'];
-        return Promise.all(
-            extensions.map((name) => installer.default(installer[name], forceDownload))
-        ).catch(rej);
-        clearTimeout(rejectTimer);
-        res();
-    });
-};
 const createWindow = async () => {
     win = new BrowserWindow({
         width: 1080,
         height: 800,
         minWidth: 380,
-        minHeight: 562,
+        minHeight: 63,
         frame: true,
         icon: nativeImage.createFromPath(path.join(__dirname, logo)),
         title: 'Pomodoro Logger',
@@ -77,10 +60,7 @@ const createWindow = async () => {
         },
     });
 
-    if (process.env.NODE_ENV !== 'production') {
-        await installExtensions().catch(console.error);
-    }
-
+    win.removeMenu();
     if (process.env.NODE_ENV === 'production') {
         win.removeMenu();
     }
